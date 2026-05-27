@@ -1,7 +1,9 @@
 import os
 from datetime import datetime
 
-import requests
+# !!! ALTERAÇÃO AQUI !!! 
+# Em vez de 'import requests', importamos o requests de dentro do curl_cffi
+from curl_cffi import requests
 import psycopg2
 from dotenv import load_dotenv
 
@@ -18,17 +20,16 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 url = "https://maiordonordeste.com.br/api/v1/numeros"
 
 # =========================
-# HEADERS PARA EVITAR 403
+# HEADERS
 # =========================
 headers = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/137.0.0.0 Safari/537.36"
+        "Chrome/120.0.0.0 Safari/537.36"
     ),
     "Accept": "application/json",
     "Referer": "https://maiordonordeste.com.br/",
-    "Connection": "keep-alive"
 }
 
 try:
@@ -37,15 +38,15 @@ try:
     print(datetime.now())
     print("===================================")
 
-    # =========================
-    # REQUISIÇÃO
-    # =========================
     print("Buscando dados no site...")
 
+    # !!! ALTERAÇÃO AQUI !!! 
+    # Adicionamos o impersonate="chrome" para enganar o Cloudflare/Firewall
     resposta = requests.get(
         url,
         headers=headers,
-        timeout=30
+        timeout=30,
+        impersonate="chrome"
     )
 
     print(f"Status Code: {resposta.status_code}")
@@ -66,17 +67,11 @@ try:
     print(f"Sócios Pagantes: {socios_pagantes}")
     print(f"Sócios Isentos: {socios_isentos}")
 
-    # =========================
-    # CONECTANDO NO POSTGRES
-    # =========================
     print("Conectando ao banco...")
 
     conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
 
-    # =========================
-    # INSERT NO BANCO
-    # =========================
     query = """
     INSERT INTO socios_historico (
         total_socios,
@@ -97,15 +92,10 @@ try:
     )
 
     conn.commit()
-
     print("Dados inseridos com sucesso!")
 
-    # =========================
-    # FECHANDO CONEXÃO
-    # =========================
     cursor.close()
     conn.close()
-
     print("Finalizado com sucesso!")
 
 except requests.exceptions.HTTPError as http_err:
