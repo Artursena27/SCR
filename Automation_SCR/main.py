@@ -1,8 +1,7 @@
 import os
 from datetime import datetime
 
-# !!! ALTERAÇÃO AQUI !!! 
-# Em vez de 'import requests', importamos o requests de dentro do curl_cffi
+# Importando a biblioteca que camufla o script e resolve o Erro 403
 from curl_cffi import requests
 import psycopg2
 from dotenv import load_dotenv
@@ -15,13 +14,10 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 # =========================
-# URL DA API
+# URL DA API E HEADERS
 # =========================
 url = "https://maiordonordeste.com.br/api/v1/numeros"
 
-# =========================
-# HEADERS
-# =========================
 headers = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -35,13 +31,12 @@ headers = {
 try:
     print("===================================")
     print("INICIANDO COLETA")
-    print(datetime.now())
+    print(datetime.now().strftime('%d/%m/%Y %H:%M:%S'))
     print("===================================")
 
     print("Buscando dados no site...")
 
-    # !!! ALTERAÇÃO AQUI !!! 
-    # Adicionamos o impersonate="chrome" para enganar o Cloudflare/Firewall
+    # O parâmetro impersonate="chrome" engana o firewall
     resposta = requests.get(
         url,
         headers=headers,
@@ -50,50 +45,58 @@ try:
     )
 
     print(f"Status Code: {resposta.status_code}")
-
     resposta.raise_for_status()
 
     dados = resposta.json()
 
     # =========================
-    # EXTRAINDO DADOS
+    # EXTRAINDO DADOS (Chaves Corrigidas)
     # =========================
-    total_socios = dados.get("totalSocios")
-    socios_pagantes = dados.get("sociosPagantes")
-    socios_isentos = dados.get("sociosIsentos")
+    total_socios = dados.get("socios_ativos")
+    socios_pagantes = dados.get("socios_ativos_pagantes")
+    
+    # Busca os isentos. Se a API não devolver, a variável fica como None.
+    socios_isentos = dados.get("socios_ativos_isentos") 
 
     print("Dados encontrados:")
     print(f"Total Sócios: {total_socios}")
     print(f"Sócios Pagantes: {socios_pagantes}")
     print(f"Sócios Isentos: {socios_isentos}")
 
-    print("Conectando ao banco...")
-
+    # =========================
+    # CONECTANDO NO POSTGRES
+    # =========================
+    print("\nConectando ao banco de dados...")
     conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
 
+    # =========================
+    # INSERT NO BANCO (Tabela Corrigida)
+    # =========================
+    # Mantivemos apenas total_socios e socios_pagantes para garantir 
+    # compatibilidade com a tabela que já funcionava.
     query = """
-    INSERT INTO socios_historico (
+    INSERT INTO historico_socios (
         total_socios,
-        socios_pagantes,
-        socios_isentos,
-        data_coleta
+        socios_pagantes
     )
-    VALUES (%s, %s, %s, NOW())
+    VALUES (%s, %s)
     """
 
     cursor.execute(
         query,
         (
             total_socios,
-            socios_pagantes,
-            socios_isentos
+            socios_pagantes
         )
     )
 
     conn.commit()
     print("Dados inseridos com sucesso!")
 
+    # =========================
+    # FECHANDO CONEXÃO
+    # =========================
     cursor.close()
     conn.close()
     print("Finalizado com sucesso!")
@@ -105,7 +108,7 @@ except requests.exceptions.RequestException as req_err:
     print(f"Erro na requisição: {req_err}")
 
 except psycopg2.Error as db_err:
-    print(f"Erro no banco: {db_err}")
+    print(f"Erro no banco de dados: {db_err}")
 
 except Exception as e:
     print(f"Erro inesperado: {e}")
